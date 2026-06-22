@@ -191,6 +191,7 @@
   .sale-amount { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700; color: var(--green); white-space: nowrap; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
   .badge-ok { background: var(--green-lt); color: var(--green); }
+  .badge-anulada { background: var(--red-lt); color: var(--red); font-size: 12px; padding: 3px 10px; }
 
   /* ── CONFIG TABLE ── */
   .config-table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -327,6 +328,31 @@
     .product-row { grid-template-columns: 1fr 70px 90px 32px; }
     .header-tabs .tab-btn { padding: 6px 10px; font-size: 12px; }
   }
+
+  /* ── CONFIRM MODAL ── */
+  #confirmModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(28,26,23,.7);
+    z-index: 600;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #confirmModal.open { display: flex; }
+  .confirm-box {
+    background: white;
+    border-radius: 12px;
+    padding: 28px 24px;
+    max-width: 380px;
+    width: 100%;
+    box-shadow: 0 8px 40px rgba(0,0,0,.35);
+    text-align: center;
+  }
+  .confirm-box h3 { font-size: 17px; margin-bottom: 8px; color: var(--dark); }
+  .confirm-box p  { font-size: 13px; color: var(--muted); margin-bottom: 22px; line-height: 1.5; }
+  .confirm-actions { display: flex; gap: 10px; justify-content: center; }
 </style>
 </head>
 <body>
@@ -522,6 +548,18 @@
 
 </main><!-- /main -->
 
+
+<!-- CONFIRM MODAL -->
+<div id="confirmModal">
+  <div class="confirm-box">
+    <h3 id="confirmTitle">¿Confirmar acción?</h3>
+    <p id="confirmMsg">Esta acción no se puede deshacer.</p>
+    <div class="confirm-actions">
+      <button class="btn btn-secondary" onclick="cerrarConfirm()">Cancelar</button>
+      <button class="btn" id="confirmOkBtn" onclick="ejecutarConfirm()">Confirmar</button>
+    </div>
+  </div>
+</div>
 
 <!-- PREVIEW MODAL -->
 <div id="previewModal">
@@ -791,19 +829,28 @@ async function renderSalesList() {
     return;
   }
 
-  container.innerHTML = ventas.map(v => `
-    <div class="sale-item">
+  container.innerHTML = ventas.map(v => {
+    const anulada = v.estado === 'anulada';
+    const vJson = JSON.stringify(v).replace(/'/g, "\'");
+    return `
+    <div class="sale-item" style="${anulada ? 'opacity:.6;' : ''}">
       <div class="sale-meta">
-        <div class="sale-sucursal">${v.sucursal.nombre}</div>
+        <div class="sale-sucursal">
+          ${v.sucursal.nombre}
+          ${anulada ? '<span class="badge badge-anulada" style="margin-left:8px">ANULADA</span>' : ''}
+        </div>
         <div class="sale-date">${v.fecha} ${v.hora} · ${v.vendedor || 'Sin vendedor'} · Factura: ${v.nroFactura || '—'}</div>
+        ${v.motivoAnulacion ? `<div style="font-size:12px;color:var(--red);margin-top:4px">Motivo: ${v.motivoAnulacion}</div>` : ''}
         <div style="margin-top:6px">${v.productos.map(p=>`<span class="badge badge-ok">${p.cantidad}× ${p.nombre}</span>`).join(' ')}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-        <div class="sale-amount">₲ ${fmt(v.total)}</div>
+        <div class="sale-amount" style="${anulada ? 'text-decoration:line-through;color:var(--muted)' : ''}">₲ ${fmt(v.total)}</div>
         <button class="btn btn-secondary btn-sm" onclick='imprimirFactura(${JSON.stringify(v)})'>🖨 Imprimir</button>
+        ${!anulada ? `<button class="btn btn-sm" style="background:#FFF3E0;color:#E65100;border:1.5px solid #E65100;" onclick="pedirAnular('${v.id}')">⊘ Anular</button>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="pedirEliminar('${v.id}')">🗑 Eliminar</button>
       </div>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 // ────────────────────────────────────────────
@@ -898,6 +945,89 @@ function cerrarPreview() {
 function confirmarImpresion() {
   cerrarPreview();
   setTimeout(() => window.print(), 150);
+}
+
+// ────────────────────────────────────────────
+// ANULAR / ELIMINAR
+// ────────────────────────────────────────────
+let _confirmCallback = null;
+
+function pedirAnular(id) {
+  const motivo = prompt('Motivo de anulación (opcional):') ;
+  if (motivo === null) return; // cancelled
+  abrirConfirm(
+    '⊘ Anular venta',
+    'La venta quedará marcada como ANULADA en el historial. Podrás seguir viéndola pero no contará como activa.',
+    '#E65100',
+    () => anularVenta(id, motivo)
+  );
+}
+
+function pedirEliminar(id) {
+  abrirConfirm(
+    '🗑 Eliminar venta',
+    'Esta acción eliminará la venta permanentemente. No se podrá recuperar.',
+    '#C1121F',
+    () => eliminarVenta(id)
+  );
+}
+
+function abrirConfirm(titulo, msg, color, callback) {
+  document.getElementById('confirmTitle').textContent = titulo;
+  document.getElementById('confirmMsg').textContent   = msg;
+  const btn = document.getElementById('confirmOkBtn');
+  btn.textContent = 'Sí, confirmar';
+  btn.style.background = color;
+  btn.style.color = 'white';
+  btn.style.border = 'none';
+  _confirmCallback = callback;
+  document.getElementById('confirmModal').classList.add('open');
+}
+
+function cerrarConfirm() {
+  document.getElementById('confirmModal').classList.remove('open');
+  _confirmCallback = null;
+}
+
+function ejecutarConfirm() {
+  cerrarConfirm();
+  if (_confirmCallback) _confirmCallback();
+}
+
+async function anularVenta(id, motivo) {
+  if (db) {
+    try {
+      await db.collection('ventas_vitapan').doc(id).update({
+        estado: 'anulada',
+        motivoAnulacion: motivo || '',
+        anuladoEn: new Date().toISOString()
+      });
+    } catch(e) { alert('Error al anular: ' + e.message); return; }
+  } else {
+    const ventas = JSON.parse(localStorage.getItem('vitapan_ventas') || '[]');
+    const idx = ventas.findIndex(v => v.id === id);
+    if (idx !== -1) {
+      ventas[idx].estado = 'anulada';
+      ventas[idx].motivoAnulacion = motivo || '';
+      localStorage.setItem('vitapan_ventas', JSON.stringify(ventas));
+    }
+  }
+  showToast('⊘ Venta anulada');
+  renderSalesList();
+}
+
+async function eliminarVenta(id) {
+  if (db) {
+    try {
+      await db.collection('ventas_vitapan').doc(id).delete();
+    } catch(e) { alert('Error al eliminar: ' + e.message); return; }
+  } else {
+    let ventas = JSON.parse(localStorage.getItem('vitapan_ventas') || '[]');
+    ventas = ventas.filter(v => v.id !== id);
+    localStorage.setItem('vitapan_ventas', JSON.stringify(ventas));
+  }
+  showToast('🗑 Venta eliminada');
+  renderSalesList();
 }
 
 // ────────────────────────────────────────────
