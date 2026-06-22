@@ -451,24 +451,9 @@
 ══════════════════════════════════════════ -->
 <div id="config" class="section">
 
-  <!-- Firebase -->
-  <div class="card">
-    <div class="card-title">🔥 Conexión Firebase</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Pegá tu objeto <code>firebaseConfig</code> completo (JSON). Todos los usuarios compartirán los mismos datos.</p>
-    <div class="field">
-      <label>Firebase Config (JSON)</label>
-      <textarea id="firebaseConfigInput" rows="8" style="font-family:monospace;font-size:12px;" placeholder='{
-  "apiKey": "...",
-  "authDomain": "...",
-  "projectId": "...",
-  "storageBucket": "...",
-  "messagingSenderId": "...",
-  "appId": "..."
-}'></textarea>
-    </div>
-    <button class="btn btn-primary" onclick="conectarFirebase()">Conectar Firebase</button>
-    <span id="fbStatus" style="font-size:13px;margin-left:12px;color:var(--muted);"></span>
-  </div>
+  <!-- Firebase config hidden (hardcoded) -->
+  <textarea id="firebaseConfigInput" style="display:none"></textarea>
+  <span id="fbStatus" style="display:none"></span>
 
   <!-- Datos VitaPan -->
   <div class="card">
