@@ -2,7 +2,7 @@
   "name": "VitaPan Ventas",
   "short_name": "VitaPan",
   "description": "Registro de ventas VitaPan a Biggie",
-  "start_url": "./vitapan-ventas.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#1C1A17",
   "theme_color": "#1C1A17",
@@ -20,5 +20,6 @@
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "scope": "./"
 }

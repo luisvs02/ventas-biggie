@@ -1,6 +1,6 @@
-const CACHE_NAME = 'vitapan-ventas-v1';
+const CACHE_NAME = 'vitapan-ventas-v2';
 const ASSETS = [
-  './vitapan-ventas.html',
+  './index.html',
   './manifest.json'
 ];
 
