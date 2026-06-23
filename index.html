@@ -353,6 +353,64 @@
   .confirm-box h3 { font-size: 17px; margin-bottom: 8px; color: var(--dark); }
   .confirm-box p  { font-size: 13px; color: var(--muted); margin-bottom: 22px; line-height: 1.5; }
   .confirm-actions { display: flex; gap: 10px; justify-content: center; }
+
+  /* ── SEARCHABLE SUCURSAL DROPDOWN ── */
+  .sucursal-search-wrap { position: relative; }
+  #sucursalSearch {
+    width: 100%;
+    padding: 9px 36px 9px 12px;
+    border: 1.5px solid #DDD6C8;
+    border-radius: 7px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    color: var(--dark);
+    background: var(--white);
+    outline: none;
+    transition: border-color .18s;
+    cursor: pointer;
+  }
+  #sucursalSearch:focus { border-color: var(--crust); }
+  .sucursal-arrow {
+    position: absolute;
+    right: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  #sucursalDropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0; right: 0;
+    background: white;
+    border: 1.5px solid var(--crust);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(28,26,23,.15);
+    z-index: 200;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  #sucursalDropdown.open { display: block; }
+  .suc-option {
+    padding: 10px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--soft);
+    transition: background .12s;
+  }
+  .suc-option:last-child { border-bottom: none; }
+  .suc-option:hover, .suc-option.highlighted { background: var(--soft); }
+  .suc-option mark {
+    background: #FFE082;
+    color: var(--dark);
+    border-radius: 2px;
+    padding: 0 1px;
+    font-style: normal;
+  }
+  .suc-option .suc-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .suc-empty { padding: 12px 14px; font-size: 13px; color: var(--muted); text-align: center; }
 </style>
 </head>
 <body>
@@ -384,9 +442,18 @@
 
     <div class="field">
       <label>Sucursal Biggie</label>
-      <select id="selectSucursal" onchange="autocompleteSucursal()">
-        <option value="">— Seleccionar sucursal —</option>
-      </select>
+      <div class="sucursal-search-wrap" id="sucursalWrap">
+        <input type="text" id="sucursalSearch" placeholder="Buscar sucursal…" autocomplete="off"
+          oninput="filtrarSucursales()"
+          onfocus="abrirDropdown()"
+          onkeydown="navDropdown(event)"
+          readonly
+          onclick="toggleDropdown()">
+        <span class="sucursal-arrow">▼</span>
+        <div id="sucursalDropdown"></div>
+      </div>
+      <!-- hidden select kept for compatibility -->
+      <select id="selectSucursal" style="display:none"></select>
     </div>
 
     <div class="row2">
@@ -662,22 +729,119 @@ function showSection(id) {
 // SUCURSAL SELECT
 // ────────────────────────────────────────────
 function renderSucursalSelect() {
+  // Just keep hidden select in sync (used elsewhere)
   const sel = document.getElementById('selectSucursal');
-  sel.innerHTML = '<option value="">— Seleccionar sucursal —</option>';
+  sel.innerHTML = '<option value="">—</option>';
   config.sucursales.forEach((s, i) => {
     sel.innerHTML += `<option value="${i}">${s.nombre}</option>`;
   });
+  // Make search field editable only when there are sucursales
+  const searchEl = document.getElementById('sucursalSearch');
+  if (searchEl) searchEl.removeAttribute('readonly');
 }
 
-function autocompleteSucursal() {
-  const idx = document.getElementById('selectSucursal').value;
-  if (idx === '') return;
+function autocompleteSucursal(idx) {
+  if (idx === '' || idx === undefined) return;
   const s = config.sucursales[idx];
+  if (!s) return;
   document.getElementById('sucursalNombre').value    = s.nombre;
   document.getElementById('sucursalRuc').value       = s.ruc;
   document.getElementById('sucursalDireccion').value = s.direccion;
   document.getElementById('sucursalTelefono').value  = s.telefono;
+  // Update search input display
+  document.getElementById('sucursalSearch').value = s.nombre;
+  cerrarDropdown();
 }
+
+// ── Dropdown logic ──
+let _dropHighlight = -1;
+
+function toggleDropdown() {
+  const dd = document.getElementById('sucursalDropdown');
+  if (dd.classList.contains('open')) {
+    cerrarDropdown();
+  } else {
+    abrirDropdown();
+  }
+}
+
+function abrirDropdown() {
+  const search = document.getElementById('sucursalSearch');
+  search.removeAttribute('readonly');
+  filtrarSucursales();
+  document.getElementById('sucursalDropdown').classList.add('open');
+  _dropHighlight = -1;
+}
+
+function cerrarDropdown() {
+  document.getElementById('sucursalDropdown').classList.remove('open');
+  _dropHighlight = -1;
+}
+
+function filtrarSucursales() {
+  const q = document.getElementById('sucursalSearch').value.toLowerCase().trim();
+  const dd = document.getElementById('sucursalDropdown');
+  dd.classList.add('open');
+
+  const resultados = config.sucursales
+    .map((s, i) => ({ ...s, idx: i }))
+    .filter(s => !q || s.nombre.toLowerCase().includes(q) ||
+                        (s.direccion && s.direccion.toLowerCase().includes(q)) ||
+                        (s.ruc && s.ruc.includes(q)));
+
+  if (resultados.length === 0) {
+    dd.innerHTML = '<div class="suc-empty">Sin resultados para "' + q + '"</div>';
+    return;
+  }
+
+  dd.innerHTML = resultados.map((s, pos) => {
+    const nombre = q ? s.nombre.replace(new RegExp(`(${q})`, 'gi'), '<mark>$1</mark>') : s.nombre;
+    return `<div class="suc-option" data-idx="${s.idx}" data-pos="${pos}"
+      onmousedown="autocompleteSucursal(${s.idx})"
+      onmouseover="highlightOption(${pos})">
+      <div>${nombre}</div>
+      <div class="suc-sub">${s.ruc ? 'RUC: ' + s.ruc : ''} ${s.direccion ? '· ' + s.direccion : ''}</div>
+    </div>`;
+  }).join('');
+
+  _dropHighlight = -1;
+}
+
+function highlightOption(pos) {
+  _dropHighlight = pos;
+  document.querySelectorAll('.suc-option').forEach((el, i) => {
+    el.classList.toggle('highlighted', i === pos);
+  });
+}
+
+function navDropdown(e) {
+  const options = document.querySelectorAll('.suc-option');
+  if (!options.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _dropHighlight = Math.min(_dropHighlight + 1, options.length - 1);
+    highlightOption(_dropHighlight);
+    options[_dropHighlight].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _dropHighlight = Math.max(_dropHighlight - 1, 0);
+    highlightOption(_dropHighlight);
+    options[_dropHighlight].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter' && _dropHighlight >= 0) {
+    e.preventDefault();
+    const idx = options[_dropHighlight].dataset.idx;
+    autocompleteSucursal(idx);
+  } else if (e.key === 'Escape') {
+    cerrarDropdown();
+  }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!document.getElementById('sucursalWrap').contains(e.target)) {
+    cerrarDropdown();
+  }
+});
 
 // ────────────────────────────────────────────
 // PRODUCT ROWS
@@ -798,7 +962,7 @@ async function guardarVenta() {
 
 function resetForm() {
   document.getElementById('selectSucursal').value = '';
-  ['sucursalNombre','sucursalRuc','sucursalDireccion','sucursalTelefono','nroFactura','vendedorNombre'].forEach(id => {
+  ['sucursalNombre','sucursalRuc','sucursalDireccion','sucursalTelefono','nroFactura','vendedorNombre','sucursalSearch'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('productRows').innerHTML = '';
